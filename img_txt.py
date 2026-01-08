@@ -5,11 +5,14 @@ import numpy as np
 import cv2
 import imutils
 import copy
-from keras.models import load_model
-from keras.preprocessing.image import img_to_array
+
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import img_to_array
+
 from imutils.perspective import four_point_transform
 from skimage.segmentation import clear_border
 from solve_sudoku import solve_sudoku_with_backtrack
+
 
 # ------------------ PUZZLE DETECTION ------------------ #
 

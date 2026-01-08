@@ -1,48 +1,57 @@
+# app.py
 import streamlit as st
-import os
-from img_txt import process_image
+import cv2
+import numpy as np
+from img_txt import process_image, display_solutions_on_image
 from solve_sudoku import solve_sudoku_with_backtrack
-from PIL import Image
+from keras.models import load_model
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+st.title("AI Sudoku Solver")
 
-st.set_page_config(page_title="AI Sudoku Solver", layout="centered")
+# Load the model once (assuming it's in the model/ folder)
+@st.cache_resource
+def load_ocr_model():
+    return load_model('model/model_1.h5')
 
-st.title("🧠 AI Sudoku Solver using OCR")
-st.write("Upload a Sudoku image and get the solved grid instantly")
+model = load_ocr_model()
 
-uploaded = st.file_uploader("Upload Sudoku Image", ["jpg", "png", "jpeg"])
-MODEL_PATH = "model/model_1.h5"
+col1, col2 = st.columns(2)
 
-def read_board(path):
-    board = []
-    with open(path) as f:
-        for line in f:
-            board.append(list(map(int, line.split())))
-    return board
+with col1:
+    uploaded_file = st.file_uploader("Upload Sudoku Image", type=["jpg", "png", "jpeg"])
 
-if uploaded:
-    with open("input.jpg", "wb") as f:
-        f.write(uploaded.getbuffer())
+if uploaded_file is not None:
+    # Read the uploaded image
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    original_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    st.image(uploaded, caption="Uploaded Sudoku")
+    try:
+        # Process the image to extract unsolved board, cell positions, and color puzzle
+        unsolved_board, cell_positions, color_puzzle = process_image(original_image, model)
 
-    with st.spinner("Extracting digits..."):
-        process_image("input.jpg", MODEL_PATH)
+        # Solve the Sudoku
+        solved_board = solve_sudoku_with_backtrack(copy.deepcopy(unsolved_board))  # Use copy to preserve unsolved
 
-    board = read_board("inp.txt")
-    solved = solve_sudoku_with_backtrack(board)
+        # Check if it was solved (i.e., changes were made)
+        count = sum(1 for i in range(9) for j in range(9) if unsolved_board[i][j] == solved_board[i][j])
+        if count == 81:
+            st.warning("The input Sudoku appears to be already solved or invalid. Displaying as-is.")
+            solved_image_rgb = cv2.cvtColor(color_puzzle, cv2.COLOR_BGR2RGB)
+        else:
+            # Generate solved image
+            solved_image_rgb = display_solutions_on_image(cell_positions, color_puzzle.copy(), unsolved_board, solved_board)
+            st.success("Sudoku Solved!")
 
-    st.success("Sudoku Solved!")
+        # Display images side by side
+        with col1:
+            st.image(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), caption="Uploaded Image", use_column_width=True)
 
-    st.subheader("Solved Grid")
-    for row in solved:
-        st.write(row)
+        with col2:
+            st.image(solved_image_rgb, caption="Solved Sudoku", use_column_width=True)
 
-    if os.path.exists("color_puzzle.jpg"):
-        st.subheader("Solved Image")
-        st.image(Image.open("color_puzzle.jpg"))
+        # Display solved grid as table
+        st.subheader("Solved Grid")
+        st.table(solved_board)
 
-    for f in ["inp.txt", "input.jpg", "color_puzzle.jpg"]:
-        if os.path.exists(f):
-            os.remove(f)
+    except Exception as e:
+        st.error(f"Error processing image: {str(e)}. Ensure the image contains a clear Sudoku grid.")

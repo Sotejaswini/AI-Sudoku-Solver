@@ -1,7 +1,7 @@
 streamlit
 tensorflow
 numpy
-opencv-python
+opencv-python-headless
 imutils
 pillow
 scikit-image
